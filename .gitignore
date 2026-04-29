@@ -1,0 +1,27 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Test recordings / audio files (don't commit your music)
+*.webm
+*.mp4
+*.mov
+*.mp3
+*.wav
+*.flac
+*.ogg
+*.m4a
+
+# Node (in case you ever add tooling)
+node_modules/
+package-lock.json
+
+# Local server temp
+.cache/

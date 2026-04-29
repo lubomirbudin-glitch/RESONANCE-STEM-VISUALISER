@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resonance · Stems</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #000;
+    color: #e8e6e0;
+    font-family: 'Inter', system-ui, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  canvas {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    display: block;
+  }
+
+  .title {
+    position: absolute; top: 22px; left: 28px;
+    font-family: 'Cinzel', serif;
+    font-size: 12px; letter-spacing: 0.45em;
+    opacity: 0.55; pointer-events: none;
+    z-index: 10;
+  }
+
+  .timer {
+    position: absolute; top: 22px; right: 28px;
+    font-family: 'Cinzel', serif;
+    font-size: 11px; letter-spacing: 0.3em;
+    opacity: 0.4; z-index: 10;
+  }
+  .timer.recording { opacity: 0.9; color: #d04848; }
+  .timer.recording::before {
+    content: '●'; margin-right: 8px;
+    animation: blink 1.2s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* Stem slots */
+  .stems-area {
+    position: absolute; top: 56px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    z-index: 10;
+  }
+  .full-song-slot {
+    height: 44px;
+    padding: 0 16px;
+    background: rgba(15,15,15,0.55);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px dashed rgba(255,255,255,0.18);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex; align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .full-song-slot:hover {
+    border-color: rgba(255,255,255,0.35);
+    background: rgba(20,20,20,0.7);
+  }
+  .full-song-slot.loaded {
+    border-style: solid;
+    border-color: rgba(232,230,224,0.3);
+  }
+  .full-song-name {
+    font-family: 'Cinzel', serif;
+    font-size: 11px; letter-spacing: 0.28em;
+    opacity: 0.85;
+    white-space: nowrap;
+  }
+  .full-song-hint {
+    font-size: 9px; letter-spacing: 0.18em;
+    text-transform: uppercase; opacity: 0.45;
+    overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .stems {
+    display: flex; gap: 10px;
+  }
+  .stem {
+    width: 130px; height: 64px;
+    padding: 10px 12px;
+    background: rgba(15,15,15,0.55);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .stem:hover {
+    border-color: rgba(255,255,255,0.2);
+    background: rgba(20,20,20,0.7);
+  }
+  .stem.loaded {
+    border-color: rgba(232,230,224,0.25);
+  }
+  .stem.loaded::before {
+    content: '';
+    position: absolute; top: 0; left: 0;
+    width: 4px; height: 100%;
+    background: var(--stem-color, #e8e6e0);
+    opacity: 0.7;
+  }
+  .stem-name {
+    font-family: 'Cinzel', serif;
+    font-size: 11px; letter-spacing: 0.25em;
+    opacity: 0.85;
+  }
+  .stem-status {
+    margin-top: 6px;
+    font-size: 9px; letter-spacing: 0.15em;
+    text-transform: uppercase; opacity: 0.5;
+    white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .stem-meter {
+    position: absolute; bottom: 0; left: 0;
+    height: 2px; width: 0%;
+    background: var(--stem-color, #e8e6e0);
+    opacity: 0.6;
+    transition: width 0.05s linear;
+  }
+  .stem[data-stem="vocals"] { --stem-color: #f4e4c1; }
+  .stem[data-stem="drums"]  { --stem-color: #e8e6e0; }
+  .stem[data-stem="bass"]   { --stem-color: #c47853; }
+  .stem[data-stem="synth"]  { --stem-color: #8eb4d4; }
+
+  /* Hint */
+  .hint {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center; pointer-events: none;
+    transition: opacity 0.6s ease;
+    z-index: 5;
+  }
+  .hint.hidden { opacity: 0; }
+  .hint-main {
+    font-family: 'Cinzel', serif;
+    font-size: 22px; letter-spacing: 0.35em;
+    opacity: 0.6;
+  }
+  .hint-sub {
+    margin-top: 16px;
+    font-size: 11px; letter-spacing: 0.25em;
+    text-transform: uppercase; opacity: 0.35;
+  }
+
+  /* Bottom panel */
+  .panel {
+    position: absolute; bottom: 26px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px;
+    background: rgba(15,15,15,0.6);
+    backdrop-filter: blur(24px) saturate(120%);
+    -webkit-backdrop-filter: blur(24px) saturate(120%);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 100px;
+    z-index: 10;
+  }
+  .btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #e8e6e0;
+    padding: 9px 18px;
+    border-radius: 100px;
+    cursor: pointer;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-family: inherit;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: rgba(255,255,255,0.06); }
+  .btn.primary { background: #f0ede5; color: #0a0a0a; }
+  .btn.primary:hover:not(:disabled) { background: #fff; }
+  .btn.rec.active { background: #d04848; color: #fff; }
+  .btn:disabled { opacity: 0.25; cursor: not-allowed; }
+  .divider { width: 1px; height: 18px; background: rgba(255,255,255,0.1); margin: 0 4px; }
+
+  .download {
+    position: absolute; bottom: 90px; left: 50%;
+    transform: translate(-50%, 20px);
+    display: flex; align-items: center; gap: 4px;
+    padding: 6px;
+    background: rgba(15,15,15,0.75);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(232,230,224,0.25);
+    border-radius: 100px;
+    opacity: 0;
+    transition: all 0.4s ease;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .download.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+    pointer-events: auto;
+  }
+  .dl-btn {
+    padding: 9px 18px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: #e8e6e0;
+    border-radius: 100px;
+    cursor: pointer;
+    font-size: 11px; letter-spacing: 0.2em;
+    text-transform: uppercase; text-decoration: none;
+    font-family: inherit;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+  }
+  .dl-btn:hover:not(:disabled) { background: rgba(255,255,255,0.08); }
+  .dl-btn.primary { background: #f0ede5; color: #0a0a0a; }
+  .dl-btn.primary:hover:not(:disabled) { background: #fff; }
+  .dl-btn:disabled { opacity: 0.45; cursor: wait; }
+  .dl-status {
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    opacity: 0.55; padding: 0 12px 0 4px;
+    min-width: 0;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div class="title">RESONANCE · STEMS</div>
+<div class="timer" id="timer">00:00</div>
+
+<div class="stems-area">
+  <div class="full-song-slot" id="fullSongSlot">
+    <span class="full-song-name">FULL SONG</span>
+    <span class="full-song-hint" id="fullSongStatus">click or drop one audio file</span>
+  </div>
+  <div class="stems">
+  <div class="stem" data-stem="vocals">
+    <div class="stem-name">VOCALS</div>
+    <div class="stem-status">— empty —</div>
+    <div class="stem-meter"></div>
+  </div>
+  <div class="stem" data-stem="drums">
+    <div class="stem-name">DRUMS</div>
+    <div class="stem-status">— empty —</div>
+    <div class="stem-meter"></div>
+  </div>
+  <div class="stem" data-stem="bass">
+    <div class="stem-name">BASS</div>
+    <div class="stem-status">— empty —</div>
+    <div class="stem-meter"></div>
+  </div>
+  <div class="stem" data-stem="synth">
+    <div class="stem-name">SYNTH</div>
+    <div class="stem-status">— empty —</div>
+    <div class="stem-meter"></div>
+  </div>
+</div>
+</div>
+
+<div class="hint" id="hint">
+  <div class="hint-main">RESONANCE</div>
+  <div class="hint-sub">load one full song or 4 stems</div>
+</div>
+
+<div class="download" id="download">
+  <a class="dl-btn" id="downloadWebm" download="resonance.webm">↓ WebM</a>
+  <button class="dl-btn primary" id="downloadMp4">↓ MP4 for Vegas</button>
+  <span class="dl-status" id="dlStatus"></span>
+</div>
+
+<div class="panel">
+  <button class="btn primary" id="playBtn" disabled>▶ Play</button>
+  <div class="divider"></div>
+  <button class="btn rec" id="recBtn" disabled>● Record</button>
+</div>
+
+<input type="file" id="fileInput" accept="audio/*" style="display:none">
+
+<script>
+// ===== Canvas =====
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0;
+const BASE_DPR = Math.min(window.devicePixelRatio || 1, 2);
+let renderScale = BASE_DPR;  // bumped to ~4K during recording
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * renderScale);
+  canvas.height = Math.round(H * renderScale);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ===== Stem state =====
+const stems = {
+  vocals: createStem('vocals'),
+  drums:  createStem('drums'),
+  bass:   createStem('bass'),
+  synth:  createStem('synth'),
+};
+
+function createStem(name) {
+  return {
+    name,
+    file: null, buffer: null,
+    source: null, gain: null, analyser: null,
+    freqData: null, timeData: null,
+    level: 0, bass: 0, mid: 0, treble: 0, highs: 0, highAttack: 0,
+    prevHighs: 0,
+    energyHistory: new Array(43).fill(0),
+    lastBeat: 0, beat: 0,
+  };
+}
+
+let audioCtx = null;
+let masterDest = null;
+let isPlaying = false;
+let startTime = 0;
+let pauseOffset = 0;
+let trackDuration = 0;
+
+// full song mode: ONE source split via filters into 4 analysers
+let isFullSongMode = false;
+let fullSongBuffer = null;
+
+// ===== File loading =====
+const fileInput = document.getElementById('fileInput');
+let activeStemName = null;
+
+document.querySelectorAll('.stem').forEach(el => {
+  el.addEventListener('click', () => {
+    activeStemName = el.dataset.stem;
+    fileInput.click();
+  });
+});
+
+// full song slot — click + drop
+const fullSongSlot = document.getElementById('fullSongSlot');
+fullSongSlot.addEventListener('click', () => {
+  activeStemName = '__full__';
+  fileInput.click();
+});
+fullSongSlot.addEventListener('dragover', e => {
+  e.preventDefault();
+  fullSongSlot.style.borderColor = 'rgba(255,255,255,0.5)';
+});
+fullSongSlot.addEventListener('dragleave', () => {
+  fullSongSlot.style.borderColor = '';
+});
+fullSongSlot.addEventListener('drop', async e => {
+  e.preventDefault();
+  fullSongSlot.style.borderColor = '';
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('audio/')) await loadFullSong(file);
+});
+
+fileInput.addEventListener('change', async (e) => {
+  if (!e.target.files[0] || !activeStemName) return;
+  const file = e.target.files[0];
+  if (activeStemName === '__full__') {
+    await loadFullSong(file);
+  } else {
+    await loadStemFile(activeStemName, file);
+  }
+  e.target.value = '';
+});
+
+async function loadFullSong(file) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const arrayBuffer = await file.arrayBuffer();
+  try {
+    const buffer = await audioCtx.decodeAudioData(arrayBuffer);
+    fullSongBuffer = buffer;
+    isFullSongMode = true;
+    trackDuration = buffer.duration;
+
+    // mark all 4 stem slots as auto-routed (with band labels)
+    const labels = { vocals: 'auto · mid', drums: 'auto · beat', bass: 'auto · low', synth: 'auto · high' };
+    for (const [name, stem] of Object.entries(stems)) {
+      stem.buffer = buffer; // shared reference (used only to know audio is present)
+      stem.file = file;
+      const el = document.querySelector(`.stem[data-stem="${name}"]`);
+      el.classList.add('loaded');
+      el.querySelector('.stem-status').textContent = labels[name];
+    }
+
+    fullSongSlot.classList.add('loaded');
+    document.getElementById('fullSongStatus').textContent =
+      file.name.replace(/\.[^.]+$/, '').slice(0, 50);
+
+    document.getElementById('hint').classList.add('hidden');
+    document.getElementById('playBtn').disabled = false;
+    document.getElementById('recBtn').disabled = false;
+  } catch (err) {
+    alert('Could not decode audio: ' + err.message);
+  }
+}
+
+async function loadStemFile(name, file) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // switching from full-song mode → clear it and reset other slots
+  if (isFullSongMode) {
+    isFullSongMode = false;
+    fullSongBuffer = null;
+    trackDuration = 0;
+    for (const [n, s] of Object.entries(stems)) {
+      if (n !== name) {
+        s.buffer = null; s.file = null;
+        const el = document.querySelector(`.stem[data-stem="${n}"]`);
+        el.classList.remove('loaded');
+        el.querySelector('.stem-status').textContent = '— empty —';
+      }
+    }
+    fullSongSlot.classList.remove('loaded');
+    document.getElementById('fullSongStatus').textContent = 'click or drop one audio file';
+  }
+
+  const stem = stems[name];
+  const arrayBuffer = await file.arrayBuffer();
+  try {
+    const buffer = await audioCtx.decodeAudioData(arrayBuffer);
+    stem.buffer = buffer;
+    stem.file = file;
+    if (buffer.duration > trackDuration) trackDuration = buffer.duration;
+
+    const el = document.querySelector(`.stem[data-stem="${name}"]`);
+    el.classList.add('loaded');
+    el.querySelector('.stem-status').textContent =
+      file.name.replace(/\.[^.]+$/, '').slice(0, 18);
+
+    document.getElementById('hint').classList.add('hidden');
+    document.getElementById('playBtn').disabled = false;
+    document.getElementById('recBtn').disabled = false;
+  } catch (err) {
+    alert('Could not decode audio: ' + err.message);
+  }
+}
+
+// ===== Playback =====
+const playBtn = document.getElementById('playBtn');
+playBtn.addEventListener('click', () => {
+  if (!audioCtx) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (isPlaying) pause(); else play();
+});
+
+function play() {
+  if (!masterDest) masterDest = audioCtx.createMediaStreamDestination();
+  const startAt = audioCtx.currentTime + 0.08;
+
+  if (isFullSongMode && fullSongBuffer) {
+    // ---- ONE source → 4 filtered analysers ----
+    const src = audioCtx.createBufferSource();
+    src.buffer = fullSongBuffer;
+
+    // Frequency-band routing per stem.
+    // drums has no filter — beat detection works on broadband energy.
+    const filters = {
+      bass:   { type: 'lowpass',  freq: 200,  Q: 0.7 },
+      vocals: { type: 'bandpass', freq: 1000, Q: 0.5 },
+      synth:  { type: 'highpass', freq: 3000, Q: 0.7 },
+      drums:  null,
+    };
+
+    for (const [name, stem] of Object.entries(stems)) {
+      const cfg = filters[name];
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.55;
+
+      if (cfg) {
+        const f = audioCtx.createBiquadFilter();
+        f.type = cfg.type;
+        f.frequency.value = cfg.freq;
+        f.Q.value = cfg.Q;
+        src.connect(f);
+        f.connect(analyser);
+      } else {
+        src.connect(analyser);
+      }
+
+      stem.analyser = analyser;
+      stem.freqData = new Uint8Array(analyser.frequencyBinCount);
+      stem.timeData = new Uint8Array(analyser.fftSize);
+      stem.source = src;  // shared reference
+    }
+
+    // Single audio output (avoid 4× volume duplication)
+    src.connect(audioCtx.destination);
+    src.connect(masterDest);
+
+    const offset = Math.min(pauseOffset, fullSongBuffer.duration);
+    src.start(startAt, offset);
+    src.onended = () => {
+      if (audioCtx.currentTime - startTime + pauseOffset >= trackDuration - 0.1) {
+        if (isPlaying) stopAll();
+      }
+    };
+  } else {
+    // ---- separate stems mode ----
+    for (const stem of Object.values(stems)) {
+      if (!stem.buffer) continue;
+      const src = audioCtx.createBufferSource();
+      src.buffer = stem.buffer;
+
+      const gain = audioCtx.createGain();
+      gain.gain.value = 1;
+
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.55;
+
+      src.connect(gain);
+      gain.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      analyser.connect(masterDest);
+
+      const offset = Math.min(pauseOffset, stem.buffer.duration);
+      src.start(startAt, offset);
+
+      stem.source = src;
+      stem.gain = gain;
+      stem.analyser = analyser;
+      stem.freqData = new Uint8Array(analyser.frequencyBinCount);
+      stem.timeData = new Uint8Array(analyser.fftSize);
+
+      src.onended = () => {
+        if (audioCtx.currentTime - startTime + pauseOffset >= trackDuration - 0.1) {
+          if (isPlaying) { stopAll(); }
+        }
+      };
+    }
+  }
+
+  startTime = startAt;
+  isPlaying = true;
+  playBtn.textContent = '❚❚ Pause';
+}
+
+function pause() {
+  if (!isPlaying) return;
+  pauseOffset += audioCtx.currentTime - startTime;
+  pauseOffset = Math.max(0, pauseOffset);
+  stopSources();
+  isPlaying = false;
+  playBtn.textContent = '▶ Play';
+}
+
+function stopAll() {
+  pauseOffset = 0;
+  stopSources();
+  isPlaying = false;
+  playBtn.textContent = '▶ Play';
+  if (isRecording) stopRecording();
+}
+
+function stopSources() {
+  const stopped = new Set();
+  for (const stem of Object.values(stems)) {
+    if (stem.source && !stopped.has(stem.source)) {
+      try { stem.source.onended = null; stem.source.stop(); } catch(e) {}
+      stopped.add(stem.source);
+    }
+    stem.source = null;
+  }
+}
+
+// ===== Recording =====
+const recBtn = document.getElementById('recBtn');
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRecording = false;
+let recordStart = 0;
+
+recBtn.addEventListener('click', () => {
+  if (isRecording) stopRecording();
+  else startRecording();
+});
+
+function startRecording() {
+  if (!isPlaying) play();
+  if (!masterDest) return;
+
+  // bump canvas to ~4K equivalent for the recording (shorter side ≥ 2160px)
+  const ideal = 2160 / Math.min(W, H);
+  renderScale = Math.max(BASE_DPR, ideal);
+  resize();
+
+  const canvasStream = canvas.captureStream(60);
+  const audioTrack = masterDest.stream.getAudioTracks()[0];
+  if (audioTrack) canvasStream.addTrack(audioTrack);
+
+  recordedChunks = [];
+  const mimeTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  let mime = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || '';
+
+  // 25 Mbps target bitrate — enough headroom for clean 4K
+  const recOpts = { videoBitsPerSecond: 25_000_000 };
+  if (mime) recOpts.mimeType = mime;
+  mediaRecorder = new MediaRecorder(canvasStream, recOpts);
+  mediaRecorder.ondataavailable = e => {
+    if (e.data.size > 0) recordedChunks.push(e.data);
+  };
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    lastWebmBlob = blob;
+    const url = URL.createObjectURL(blob);
+    document.getElementById('downloadWebm').href = url;
+    document.getElementById('download').classList.add('show');
+    document.getElementById('dlStatus').textContent = '';
+
+    // restore screen render scale
+    renderScale = BASE_DPR;
+    resize();
+  };
+  mediaRecorder.start(100);
+  isRecording = true;
+  recordStart = performance.now();
+  recBtn.textContent = '■ Stop';
+  recBtn.classList.add('active');
+  document.getElementById('timer').classList.add('recording');
+}
+
+function stopRecording() {
+  if (!mediaRecorder) return;
+  if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  isRecording = false;
+  recBtn.textContent = '● Record';
+  recBtn.classList.remove('active');
+  document.getElementById('timer').classList.remove('recording');
+}
+
+// ===== MP4 conversion (lazy-load ffmpeg.wasm on demand) =====
+let lastWebmBlob = null;
+let ffmpegInstance = null;
+
+function setStatus(msg) {
+  document.getElementById('dlStatus').textContent = msg;
+}
+
+function loadFfmpegScript() {
+  return new Promise((resolve, reject) => {
+    if (window.FFmpeg) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/@ffmpeg/[email protected]/dist/ffmpeg.min.js';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Could not download ffmpeg.wasm'));
+    document.head.appendChild(s);
+  });
+}
+
+async function getFfmpeg() {
+  if (ffmpegInstance) return ffmpegInstance;
+  setStatus('Loading converter (~25 MB)…');
+  await loadFfmpegScript();
+  const { createFFmpeg } = window.FFmpeg;
+  ffmpegInstance = createFFmpeg({
+    // single-threaded core: no SharedArrayBuffer needed → works on file://
+    corePath: 'https://unpkg.com/@ffmpeg/[email protected]/dist/ffmpeg-core.js',
+    log: false,
+    progress: ({ ratio }) => {
+      if (ratio >= 0 && ratio <= 1) {
+        setStatus(`Converting ${Math.round(ratio * 100)}%`);
+      }
+    },
+  });
+  setStatus('Initializing…');
+  await ffmpegInstance.load();
+  return ffmpegInstance;
+}
+
+document.getElementById('downloadMp4').addEventListener('click', async () => {
+  if (!lastWebmBlob) return;
+  const btn = document.getElementById('downloadMp4');
+  btn.disabled = true;
+  try {
+    const ffmpeg = await getFfmpeg();
+    const { fetchFile } = window.FFmpeg;
+
+    setStatus('Reading video…');
+    ffmpeg.FS('writeFile', 'in.webm', await fetchFile(lastWebmBlob));
+
+    setStatus('Converting 0%');
+    // H.264 + AAC, yuv420p for max compatibility (Vegas, Premiere, QuickTime…)
+    await ffmpeg.run(
+      '-i', 'in.webm',
+      '-c:v', 'libx264',
+      '-preset', 'fast',
+      '-crf', '18',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      '-b:a', '256k',
+      '-movflags', '+faststart',
+      'out.mp4'
+    );
+
+    const data = ffmpeg.FS('readFile', 'out.mp4');
+    try { ffmpeg.FS('unlink', 'in.webm'); } catch(e) {}
+    try { ffmpeg.FS('unlink', 'out.mp4'); } catch(e) {}
+
+    const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
+    const url = URL.createObjectURL(mp4Blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'resonance.mp4';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+    setStatus('Done · saved as resonance.mp4');
+  } catch (err) {
+    console.error(err);
+    setStatus('Failed — see console');
+    alert(
+      'Could not convert in browser.\n\n' +
+      'Possible reasons: no internet, browser blocked WASM, or out of memory ' +
+      '(very long recordings).\n\n' +
+      'Workaround — download the WebM and convert with ffmpeg in PowerShell:\n\n' +
+      'ffmpeg -i resonance.webm -c:v libx264 -preset slow -crf 18 ' +
+      '-c:a aac -b:a 320k -pix_fmt yuv420p resonance.mp4'
+    );
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ===== Analysis =====
+function analyse(stem, t) {
+  if (!stem.analyser) {
+    stem.level = stem.bass = stem.mid = stem.treble = 0;
+    stem.beat = 0;
+    return;
+  }
+  stem.analyser.getByteFrequencyData(stem.freqData);
+  stem.analyser.getByteTimeDomainData(stem.timeData);
+
+  const n = stem.freqData.length;
+  const bassEnd = Math.floor(n * 0.06);
+  const midEnd = Math.floor(n * 0.22);
+  const highEnd = Math.floor(n * 0.55); // upper limit — air/sparkle
+  let b = 0, m = 0, tr = 0, hi = 0, lv = 0;
+  for (let i = 0; i < bassEnd; i++) b += stem.freqData[i];
+  for (let i = bassEnd; i < midEnd; i++) m += stem.freqData[i];
+  for (let i = midEnd; i < highEnd; i++) tr += stem.freqData[i];
+  for (let i = midEnd; i < n; i++) hi += stem.freqData[i];        // wider high band
+  for (let i = 0; i < n; i++) lv += stem.freqData[i];
+
+  stem.bass   = b / (bassEnd * 255);
+  stem.mid    = m / ((midEnd - bassEnd) * 255);
+  // treble & highs boosted — they naturally have lower amplitudes
+  stem.treble = Math.min(1, (tr / ((highEnd - midEnd) * 255)) * 2.4);
+  stem.highs  = Math.min(1, (hi / ((n - midEnd) * 255)) * 2.8);
+  stem.level  = lv / (n * 255);
+
+  // peak detection on highs (sparkle attack)
+  if (stem.prevHighs === undefined) stem.prevHighs = 0;
+  stem.highAttack = Math.max(0, stem.highs - stem.prevHighs) * 4;
+  stem.prevHighs = stem.highs;
+
+  // beat detection on the level (used mostly for drums)
+  stem.energyHistory.shift();
+  stem.energyHistory.push(stem.level);
+  const avg = stem.energyHistory.reduce((a, x) => a + x, 0) / stem.energyHistory.length;
+  const variance = stem.energyHistory.reduce((s, v) => s + (v - avg) ** 2, 0) / stem.energyHistory.length;
+  const threshold = avg + Math.sqrt(variance) * 1.3 + 0.04;
+  stem.beat *= 0.85;
+  if (stem.level > threshold && t - stem.lastBeat > 110) {
+    stem.lastBeat = t;
+    stem.beat = Math.min(1, (stem.level - avg) * 3);
+  }
+}
+
+// ===== Visual: monochrome ornamental mandala =====
+// Concentric line-drawn polygons (3, 5, 7, 9, 12 sides). Each rotates around
+// its own center, at its own base rate × global melody intensity.
+//   melody (vocals + synth)  -> rotation speed of all polygons
+//   vocals waveform          -> wobble of polygon edges (form "speaks")
+//   bass                     -> overall breath (scale) + atmospheric glow
+//   drums                    -> ornamental glyphs flashing around the form
+// Palette: black + bone (#e8e0d0) + occasional white for drum hits.
+
+const drumGlyphs = [];
+
+// Each polygon keeps its own rotation accumulator so rotation is per-shape.
+// `lockable: true` means: when synth plays alone (others quiet), this
+// polygon "resonates" — vertices precisely trace the synth waveform.
+const polygons = [
+  { sides: 3,  scale: 1.55, speed:  1.0, alpha: 0.45, rotation: 0 },
+  { sides: 5,  scale: 1.10, speed: -1.5, alpha: 0.65, rotation: 0 },
+  { sides: 7,  scale: 0.78, speed:  1.2, alpha: 0.55, rotation: 0 },
+  { sides: 9,  scale: 1.85, speed: -0.8, alpha: 0.38, rotation: 0 },
+  { sides: 12, scale: 2.20, speed:  0.6, alpha: 0.30, rotation: 0, lockable: true },
+];
+
+// Smoothed audio values for graceful response.
+const smooth = {
+  melody: 0,        // vocals + synth, drives rotation speed
+  bassBreath: 1,    // overall scale (atmospheric)
+  synthGlow: 0,     // outer line intensity
+  vocalsAmp: 0,     // edge wobble amount
+  synthSolo: 0,     // 0..1 — how isolated the synth is (others quiet)
+  synthPeak: 0,     // 0..1 — normalized peak frequency of synth
+  drumKick: 0,      // 0..1 — fast-decaying beat envelope
+};
+
+function drawMandala(stems, t) {
+  const cx = W / 2, cy = H / 2;
+  const baseR = Math.min(W, H) * 0.22;
+
+  // ---- audio smoothing ----
+  // melody = vocals + synth (orchestra). Range 0..~1.
+  const melodyTarget = stems.vocals.level * 0.7 + stems.synth.level * 0.55 + stems.vocals.mid * 0.25;
+  smooth.melody     += (melodyTarget - smooth.melody) * 0.13;
+  const breathTarget = 1 + stems.bass.level * 0.22 + stems.bass.bass * 0.15;
+  smooth.bassBreath += (breathTarget - smooth.bassBreath) * 0.16;
+  smooth.synthGlow  += (stems.synth.level - smooth.synthGlow) * 0.10;
+  smooth.vocalsAmp  += (stems.vocals.level - smooth.vocalsAmp) * 0.18;
+
+  // drum kick — fast attack, fast decay
+  smooth.drumKick *= 0.85;
+  if (stems.drums.beat > 0.05) {
+    smooth.drumKick = Math.max(smooth.drumKick, stems.drums.beat);
+  }
+
+  // ---- synth solo detection ----
+  // "Synth alone" = synth audible AND other stems quiet. Range 0..1.
+  const otherMax = Math.max(stems.vocals.level, stems.bass.level, stems.drums.level);
+  const synthSoloRaw = stems.synth.level > 0.04
+    ? Math.max(0, Math.min(1, (stems.synth.level - otherMax * 1.5) * 2.6))
+    : 0;
+  smooth.synthSolo += (synthSoloRaw - smooth.synthSolo) * 0.10;
+
+  // dominant frequency in synth (for sync rotation when locked)
+  let peakNorm = 0;
+  if (stems.synth.freqData) {
+    const fd = stems.synth.freqData;
+    let maxV = 0, maxIdx = 0;
+    for (let i = 2; i < fd.length; i++) {
+      if (fd[i] > maxV) { maxV = fd[i]; maxIdx = i; }
+    }
+    if (maxV > 25) peakNorm = maxIdx / fd.length;
+  }
+  smooth.synthPeak += (peakNorm - smooth.synthPeak) * 0.18;
+
+  const breath  = smooth.bassBreath;
+  const meld    = smooth.melody;
+  const vTime   = stems.vocals.timeData;
+  const sTime   = stems.synth.timeData;
+  const vAmp    = smooth.vocalsAmp;
+  const sLock   = smooth.synthSolo;       // 0..1 lock factor
+
+  // base rotation step per frame — clearly modulated by melody
+  // quiet music: ~5°/sec drift. peak melody: ~120°/sec on fastest polygon.
+  const spinStep = 0.0012 + meld * 0.022;
+
+  // advance each polygon's own rotation
+  // when a polygon is "lockable" and synth is solo, rotation locks to synth pitch
+  for (const p of polygons) {
+    if (p.lockable && sLock > 0.05) {
+      const lockedStep = (0.0006 + smooth.synthPeak * 0.05) * p.speed;
+      const normalStep = spinStep * p.speed;
+      p.rotation += normalStep * (1 - sLock) + lockedStep * sLock;
+    } else {
+      p.rotation += spinStep * p.speed;
+    }
+  }
+
+  // ---- atmospheric outer glow (bass) ----
+  const glowR = baseR * 2.6 * breath;
+  const glow = ctx.createRadialGradient(cx, cy, baseR * 0.4, cx, cy, glowR);
+  glow.addColorStop(0, `rgba(232, 224, 208, ${0.05 + stems.bass.bass * 0.13})`);
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // ---- thin radial spokes (synth treble — brighten 300% with high tones) ----
+  const spokes = 36;
+  for (let i = 0; i < spokes; i++) {
+    const a = (i / spokes) * Math.PI * 2 + polygons[0].rotation * 0.2;
+    const r1 = baseR * 0.3 * breath;
+    const r2 = baseR * (1.7 + stems.synth.treble * 0.5) * breath;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+    ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+    // 300% sensitivity to synth treble (was 0.08, now 0.24)
+    ctx.strokeStyle = `rgba(245, 240, 228, ${0.02 + stems.synth.treble * 0.24})`;
+    ctx.lineWidth = 0.4;
+    ctx.stroke();
+  }
+
+  // ---- concentric polygons (the heart) ----
+  // Polygons enlarge max +15% on beat (subtle reaction — the core punches more)
+  const polyBreath = 1 + smooth.drumKick * 0.15;
+  for (const p of polygons) {
+    const rot = p.rotation;
+    // lockable polygon: scale gently follows synth amplitude when locked
+    const lockedScale = p.scale * (0.9 + stems.synth.level * 0.4);
+    const lockMix = p.lockable ? sLock : 0;
+    const r = baseR * polyBreath * (p.scale * (1 - lockMix) + lockedScale * lockMix);
+    const sides = p.sides;
+
+    ctx.beginPath();
+    const segments = sides * 8; // smooth perimeter sampling
+    for (let i = 0; i <= segments; i++) {
+      const a = (i / segments) * Math.PI * 2 + rot;
+
+      // analytic distance from center to polygon edge along ray angle a
+      const sectorAngle = Math.PI * 2 / sides;
+      let polyA = ((a - rot) % sectorAngle + sectorAngle) % sectorAngle;
+      const halfSide = sectorAngle / 2;
+      const polyR = r * Math.cos(halfSide) / Math.cos(polyA - halfSide);
+
+      // edge wobble: blend vocal waveform (default) with synth waveform (when locked)
+      let mod = 0;
+      if (vTime) {
+        const idx = Math.floor((i / segments) * vTime.length) % vTime.length;
+        const v = (vTime[idx] - 128) / 128;
+        mod += v * 22 * (0.3 + vAmp * 1.6) * (1 - lockMix);
+      }
+      if (lockMix > 0 && sTime) {
+        const sidx = Math.floor((i / segments) * sTime.length) % sTime.length;
+        const sv = (sTime[sidx] - 128) / 128;
+        // amplitude tripled (+200%) so the polygon visibly vibrates with high tones
+        mod += sv * 114 * (0.4 + stems.synth.level * 1.8) * lockMix;
+      }
+      const finalR = polyR + mod;
+      const x = Math.cos(a) * finalR;
+      const y = Math.sin(a) * finalR;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    // when locked, the resonating polygon brightens and thickens
+    const baseIntensity = p.alpha * (0.5 + smooth.synthGlow * 0.6 + meld * 0.3);
+    const intensity = baseIntensity + lockMix * 0.55;
+    ctx.strokeStyle = `rgba(232, 224, 208, ${intensity})`;
+    ctx.lineWidth = 0.8 + lockMix * 1.4;
+    ctx.stroke();
+  }
+
+  // ---- core "ball": punches HARD on beat ----
+  const drumK = smooth.drumKick;
+  const coreBase = baseR * 0.13;
+  const coreR = coreBase * (1 + drumK * 1.8 + stems.bass.bass * 0.25);
+
+  // halo flash on beat — radiates out
+  if (drumK > 0.04) {
+    const haloR = coreR * (2.0 + drumK * 2.5);
+    const halo = ctx.createRadialGradient(0, 0, coreR * 0.5, 0, 0, haloR);
+    halo.addColorStop(0,   `rgba(248, 240, 220, ${drumK * 0.40})`);
+    halo.addColorStop(0.5, `rgba(232, 224, 208, ${drumK * 0.10})`);
+    halo.addColorStop(1,   'rgba(232, 224, 208, 0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(0, 0, haloR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // solid core disc
+  const coreGrd = ctx.createRadialGradient(0, 0, 0, 0, 0, coreR * 1.3);
+  coreGrd.addColorStop(0,   `rgba(248, 240, 224, ${0.88 + drumK * 0.12})`);
+  coreGrd.addColorStop(0.55, `rgba(232, 224, 208, 0.5)`);
+  coreGrd.addColorStop(1,   'rgba(232, 224, 208, 0)');
+  ctx.fillStyle = coreGrd;
+  ctx.beginPath();
+  ctx.arc(0, 0, coreR * 1.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // outer ring — thickens on beat
+  ctx.beginPath();
+  ctx.arc(0, 0, coreR * 1.7, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(232, 224, 208, ${0.35 + drumK * 0.5})`;
+  ctx.lineWidth = 0.6 + drumK * 1.8;
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawDrumGlyphs(d, t) {
+  const cx = W / 2, cy = H / 2;
+  const baseR = Math.min(W, H) * 0.22;
+
+  // spawn glyphs on beat
+  if (d.beat > 0.22 && drumGlyphs.length < 32) {
+    const count = 1 + Math.floor(d.beat * 2);
+    for (let i = 0; i < count; i++) {
+      drumGlyphs.push({
+        angle: Math.random() * Math.PI * 2,
+        dist: baseR * (1.6 + Math.random() * 0.9),
+        size: 5 + d.beat * 9,
+        life: 1,
+        decay: 0.045 + Math.random() * 0.025,
+        type: Math.floor(Math.random() * 4),
+        rotation: Math.random() * Math.PI,
+      });
+    }
+  }
+
+  for (let i = drumGlyphs.length - 1; i >= 0; i--) {
+    const g = drumGlyphs[i];
+    g.life -= g.decay;
+    if (g.life <= 0) { drumGlyphs.splice(i, 1); continue; }
+
+    const x = cx + Math.cos(g.angle) * g.dist;
+    const y = cy + Math.sin(g.angle) * g.dist;
+    const fade = g.life;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(g.rotation);
+    ctx.strokeStyle = `rgba(255, 252, 244, ${fade * 0.85})`;
+    ctx.lineWidth = 0.9;
+
+    const s = g.size;
+    if (g.type === 0) {
+      ctx.beginPath();
+      ctx.moveTo(-s, 0); ctx.lineTo(s, 0);
+      ctx.moveTo(0, -s); ctx.lineTo(0, s);
+      ctx.stroke();
+    } else if (g.type === 1) {
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.7, -s * 0.7); ctx.lineTo(s * 0.7, s * 0.7);
+      ctx.moveTo(-s * 0.7, s * 0.7);  ctx.lineTo(s * 0.7, -s * 0.7);
+      ctx.stroke();
+    } else if (g.type === 2) {
+      ctx.beginPath();
+      ctx.arc(0, 0, s * 0.55, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(255, 252, 244, ${fade * 0.85})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, s * 0.13, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(0, -s); ctx.lineTo(s * 0.2, 0);
+      ctx.lineTo(s, 0);  ctx.lineTo(s * 0.2, s * 0.15);
+      ctx.lineTo(0, s);  ctx.lineTo(-s * 0.2, s * 0.15);
+      ctx.lineTo(-s, 0); ctx.lineTo(-s * 0.2, 0);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  if (d.beat > 0.55) {
+    ctx.fillStyle = `rgba(255, 252, 244, ${d.beat * 0.018})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function drawVignette() {
+  const cx = W / 2, cy = H / 2;
+  const r = Math.max(W, H) * 0.75;
+  const grd = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r);
+  grd.addColorStop(0, 'rgba(0,0,0,0)');
+  grd.addColorStop(1, 'rgba(0,0,0,0.65)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// ===== Main loop =====
+function frame() {
+  const t = performance.now();
+
+  // update analysers
+  for (const stem of Object.values(stems)) analyse(stem, t);
+
+  // soft trail — sustained motion
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
+  ctx.fillRect(0, 0, W, H);
+
+  drawMandala(stems, t);
+  drawDrumGlyphs(stems.drums, t);
+  drawVignette();
+
+  // update stem meters in UI
+  for (const [name, stem] of Object.entries(stems)) {
+    const meter = document.querySelector(`.stem[data-stem="${name}"] .stem-meter`);
+    if (meter) meter.style.width = (stem.level * 100) + '%';
+  }
+
+  // timer
+  if (isRecording) {
+    const sec = (performance.now() - recordStart) / 1000;
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = Math.floor(sec % 60).toString().padStart(2, '0');
+    document.getElementById('timer').textContent = `REC ${m}:${s}`;
+  } else if (isPlaying) {
+    const sec = audioCtx.currentTime - startTime + pauseOffset;
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = Math.floor(sec % 60).toString().padStart(2, '0');
+    document.getElementById('timer').textContent = `${m}:${s}`;
+  } else {
+    document.getElementById('timer').textContent = '00:00';
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ===== Drag & drop on stem slots =====
+document.querySelectorAll('.stem').forEach(el => {
+  el.addEventListener('dragover', e => {
+    e.preventDefault();
+    el.style.borderColor = 'rgba(255,255,255,0.5)';
+  });
+  el.addEventListener('dragleave', () => {
+    el.style.borderColor = '';
+  });
+  el.addEventListener('drop', async e => {
+    e.preventDefault();
+    el.style.borderColor = '';
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('audio/')) {
+      await loadStemFile(el.dataset.stem, file);
+    }
+  });
+});
+</script>
+</body>
+</html>
