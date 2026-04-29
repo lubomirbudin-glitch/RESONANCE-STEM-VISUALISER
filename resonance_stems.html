@@ -285,8 +285,10 @@
 
 <div class="panel">
   <button class="btn primary" id="playBtn" disabled>▶ Play</button>
+  <button class="btn" id="restartBtn" disabled title="Restart from beginning">⏮ Restart</button>
   <div class="divider"></div>
   <button class="btn rec" id="recBtn" disabled>● Record</button>
+  <button class="btn rec" id="recFromStartBtn" disabled title="Rewind to start and record">⏮● Rec from Start</button>
 </div>
 
 <input type="file" id="fileInput" accept="audio/*" style="display:none">
@@ -408,7 +410,9 @@ async function loadFullSong(file) {
 
     document.getElementById('hint').classList.add('hidden');
     document.getElementById('playBtn').disabled = false;
+    document.getElementById('restartBtn').disabled = false;
     document.getElementById('recBtn').disabled = false;
+    document.getElementById('recFromStartBtn').disabled = false;
   } catch (err) {
     alert('Could not decode audio: ' + err.message);
   }
@@ -449,7 +453,9 @@ async function loadStemFile(name, file) {
 
     document.getElementById('hint').classList.add('hidden');
     document.getElementById('playBtn').disabled = false;
+    document.getElementById('restartBtn').disabled = false;
     document.getElementById('recBtn').disabled = false;
+    document.getElementById('recFromStartBtn').disabled = false;
   } catch (err) {
     alert('Could not decode audio: ' + err.message);
   }
@@ -461,6 +467,23 @@ playBtn.addEventListener('click', () => {
   if (!audioCtx) return;
   if (audioCtx.state === 'suspended') audioCtx.resume();
   if (isPlaying) pause(); else play();
+});
+
+const restartBtn = document.getElementById('restartBtn');
+restartBtn.addEventListener('click', () => {
+  if (!audioCtx) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const wasPlaying = isPlaying;
+  if (isPlaying) {
+    stopSources();
+    isPlaying = false;
+  }
+  pauseOffset = 0;
+  if (wasPlaying) {
+    play();
+  } else {
+    playBtn.textContent = '▶ Play';
+  }
 });
 
 function play() {
@@ -594,6 +617,20 @@ let recordStart = 0;
 recBtn.addEventListener('click', () => {
   if (isRecording) stopRecording();
   else startRecording();
+});
+
+const recFromStartBtn = document.getElementById('recFromStartBtn');
+recFromStartBtn.addEventListener('click', () => {
+  if (!audioCtx) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (isRecording) stopRecording();
+  if (isPlaying) {
+    stopSources();
+    isPlaying = false;
+  }
+  pauseOffset = 0;
+  playBtn.textContent = '▶ Play';
+  startRecording();
 });
 
 function startRecording() {
